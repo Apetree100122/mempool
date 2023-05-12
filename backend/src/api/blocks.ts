@@ -26,6 +26,7 @@ import PricesRepository from '../repositories/PricesRepository';
 import priceUpdater from '../tasks/price-updater';
 import chainTips from './chain-tips';
 import redisCache from './redis-cache';
+import rbfCache from './rbf-cache';
 
 class Blocks {
   private blocks: BlockExtended[] = [];

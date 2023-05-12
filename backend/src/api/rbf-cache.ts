@@ -1,20 +1,35 @@
+import config from "../config";
 import logger from "../logger";
 import { MempoolTransactionExtended, TransactionStripped } from "../mempool.interfaces";
 import bitcoinApi from './bitcoin/bitcoin-api-factory';
 import { Common } from "./common";
+import redisCache from "./redis-cache";
 
-interface RbfTransaction extends TransactionStripped {
+export interface RbfTransaction extends TransactionStripped {
   rbf?: boolean;
   mined?: boolean;
 }
 
-interface RbfTree {
+export interface RbfTree {
   tx: RbfTransaction;
   time: number;
   interval?: number;
   mined?: boolean;
   fullRbf: boolean;
   replaces: RbfTree[];
+}
+
+enum CacheOp {
+  Remove = 0,
+  Add = 1,
+  Change = 2,
+}
+
+interface CacheEvent {
+  op: CacheOp;
+  type: 'tx' | 'tree' | 'exp';
+  txid: string,
+  value?: any,
 }
 
 class RbfCache {
@@ -25,9 +40,41 @@ class RbfCache {
   private treeMap: Map<string, string> = new Map(); // map of txids to sequence ids
   private txs: Map<string, MempoolTransactionExtended> = new Map();
   private expiring: Map<string, number> = new Map();
+  private cacheQueue: CacheEvent[] = [];
 
   constructor() {
     setInterval(this.cleanup.bind(this), 1000 * 60 * 10);
+  }
+
+  private addTx(txid: string, tx: MempoolTransactionExtended): void {
+    this.txs.set(txid, tx);
+    this.cacheQueue.push({ op: CacheOp.Add, type: 'tx', txid });
+  }
+
+  private addTree(txid: string, tree: RbfTree): void {
+    this.rbfTrees.set(txid, tree);
+    this.dirtyTrees.add(txid);
+    this.cacheQueue.push({ op: CacheOp.Add, type: 'tree', txid });
+  }
+
+  private addExpiration(txid: string, expiry: number): void {
+    this.expiring.set(txid, expiry);
+    this.cacheQueue.push({ op: CacheOp.Add, type: 'exp', txid, value: expiry });
+  }
+
+  private removeTx(txid: string): void {
+    this.txs.delete(txid);
+    this.cacheQueue.push({ op: CacheOp.Remove, type: 'tx', txid });
+  }
+
+  private removeTree(txid: string): void {
+    this.rbfTrees.delete(txid);
+    this.cacheQueue.push({ op: CacheOp.Remove, type: 'tree', txid });
+  }
+
+  private removeExpiration(txid: string): void {
+    this.expiring.delete(txid);
+    this.cacheQueue.push({ op: CacheOp.Remove, type: 'exp', txid });
   }
 
   public add(replaced: MempoolTransactionExtended[], newTxExtended: MempoolTransactionExtended): void {
@@ -38,7 +85,7 @@ class RbfCache {
     const newTx = Common.stripTransaction(newTxExtended) as RbfTransaction;
     const newTime = newTxExtended.firstSeen || (Date.now() / 1000);
     newTx.rbf = newTxExtended.vin.some((v) => v.sequence < 0xfffffffe);
-    this.txs.set(newTx.txid, newTxExtended);
+    this.addTx(newTx.txid, newTxExtended);
 
     // maintain rbf trees
     let fullRbf = false;
@@ -51,7 +98,7 @@ class RbfCache {
         const treeId = this.treeMap.get(replacedTx.txid);
         if (treeId) {
           const tree = this.rbfTrees.get(treeId);
-          this.rbfTrees.delete(treeId);
+          this.removeTree(treeId);
           if (tree) {
             tree.interval = newTime - tree?.time;
             replacedTrees.push(tree);
@@ -68,7 +115,7 @@ class RbfCache {
           replaces: [],
         });
         fullRbf = fullRbf || !replacedTx.rbf;
-        this.txs.set(replacedTx.txid, replacedTxExtended);
+        this.addTx(replacedTx.txid, replacedTxExtended);
       }
     }
     const treeId = replacedTrees[0].tx.txid;
@@ -78,10 +125,9 @@ class RbfCache {
       fullRbf,
       replaces: replacedTrees
     };
-    this.rbfTrees.set(treeId, newTree);
+    this.addTree(treeId, newTree);
     this.updateTreeMap(treeId, newTree);
     this.replaces.set(newTx.txid, replacedTrees.map(tree => tree.tx.txid));
-    this.dirtyTrees.add(treeId);
   }
 
   public getReplacedBy(txId: string): string | undefined {
@@ -157,6 +203,7 @@ class RbfCache {
         this.setTreeMined(tree, txid);
         tree.mined = true;
         this.dirtyTrees.add(treeId);
+        this.cacheQueue.push({ op: CacheOp.Change, type: 'tree', txid: treeId });
       }
     }
     this.evict(txid);
@@ -165,7 +212,8 @@ class RbfCache {
   // flag a transaction as removed from the mempool
   public evict(txid: string, fast: boolean = false): void {
     if (this.txs.has(txid) && (fast || !this.expiring.has(txid))) {
-      this.expiring.set(txid, fast ? Date.now() + (1000 * 60 * 10) : Date.now() + (1000 * 86400)); // 24 hours
+      const expiryTime = fast ? Date.now() + (1000 * 60 * 10) : Date.now() + (1000 * 86400); // 24 hours
+      this.addExpiration(txid, expiryTime);
     }
   }
 
@@ -173,11 +221,11 @@ class RbfCache {
     const now = Date.now();
     for (const txid of this.expiring.keys()) {
       if ((this.expiring.get(txid) || 0) < now) {
-        this.expiring.delete(txid);
+        this.removeExpiration(txid);
         this.remove(txid);
       }
     }
-    logger.debug(`rbf cache contains ${this.txs.size} txs, ${this.expiring.size} due to expire`);
+    logger.debug(`rbf cache contains ${this.txs.size} txs, ${this.rbfTrees.size} trees, ${this.expiring.size} due to expire`);
   }
 
   // remove a transaction & all previous versions from the cache
@@ -187,14 +235,14 @@ class RbfCache {
       const replaces = this.replaces.get(txid);
       this.replaces.delete(txid);
       this.treeMap.delete(txid);
-      this.txs.delete(txid);
-      this.expiring.delete(txid);
+      this.removeTx(txid);
+      this.removeExpiration(txid);
       for (const tx of (replaces || [])) {
         // recursively remove prior versions from the cache
         this.replacedBy.delete(tx);
         // if this is the id of a tree, remove that too
         if (this.treeMap.get(tx) === tx) {
-          this.rbfTrees.delete(tx);
+          this.removeTree(tx);
         }
         this.remove(tx);
       }
@@ -224,6 +272,33 @@ class RbfCache {
         this.setTreeMined(subtree, txid);
       });
     }
+  }
+
+  public async updateCache(): Promise<void> {
+    if (!config.REDIS.ENABLED) {
+      return;
+    }
+    // Update the Redis cache by replaying queued events
+    for (const e of this.cacheQueue) {
+      if (e.op === CacheOp.Add || e.op === CacheOp.Change) {
+        let value = e.value;
+          switch(e.type) {
+            case 'tx': {
+              value = this.txs.get(e.txid);
+            } break;
+            case 'tree': {
+              const tree = this.rbfTrees.get(e.txid);
+              value = tree ? this.exportTree(tree) : null;
+            } break;
+          }
+          if (value != null) {
+            await redisCache.$setRbfEntry(e.type, e.txid, value);
+          }
+      } else if (e.op === CacheOp.Remove) {
+        await redisCache.$removeRbfEntry(e.type, e.txid);
+      }
+    }
+    this.cacheQueue = [];
   }
 
   public dump(): any {
@@ -331,8 +406,7 @@ class RbfCache {
     };
     this.treeMap.set(txid, root);
     if (root === txid) {
-      this.rbfTrees.set(root, tree);
-      this.dirtyTrees.add(root);
+      this.addTree(root, tree);
     }
     return tree;
   }
