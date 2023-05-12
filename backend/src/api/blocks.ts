@@ -25,6 +25,7 @@ import DifficultyAdjustmentsRepository from '../repositories/DifficultyAdjustmen
 import PricesRepository from '../repositories/PricesRepository';
 import priceUpdater from '../tasks/price-updater';
 import chainTips from './chain-tips';
+import redisCache from './redis-cache';
 
 class Blocks {
   private blocks: BlockExtended[] = [];
@@ -742,9 +743,18 @@ class Blocks {
       if (this.newBlockCallbacks.length) {
         this.newBlockCallbacks.forEach((cb) => cb(blockExtended, txIds, transactions));
       }
-      if (!memPool.hasPriority() && (block.height % config.MEMPOOL.DISK_CACHE_BLOCK_INTERVAL === 0)) {
+      if (config.MEMPOOL.CACHE_ENABLED && !memPool.hasPriority() && (block.height % config.MEMPOOL.DISK_CACHE_BLOCK_INTERVAL === 0)) {
         diskCache.$saveCacheToDisk();
       }
+
+      // Update Redis cache
+      if (config.REDIS.ENABLED) {
+        await redisCache.$updateBlocks(this.blocks);
+        await redisCache.$updateBlockSummaries(this.blockSummaries);
+        await redisCache.$removeTransactions(txIds);
+        await rbfCache.updateCache();
+      }
+
 
       // wait for pending async callbacks to finish
       this.updateTimerProgress(timer, `waiting for async callbacks to complete for ${this.currentBlockHeight}`);
