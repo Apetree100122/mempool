@@ -1,27 +1,38 @@
-import { OnChanges } from '@angular/core';
+import { OnChanges, OnDestroy } from '@angular/core';
 import { Component, Input, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { StateService } from '../../services/state.service';
 
 @Component({
   selector: 'app-fee-distribution-graph',
   templateUrl: './fee-distribution-graph.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class FeeDistributionGraphComponent implements OnInit, OnChanges {
+export class FeeDistributionGraphComponent implements OnInit, OnChanges, OnDestroy {
   @Input() data: any;
   @Input() height: number | string = 210;
   @Input() top: number | string = 20;
   @Input() right: number | string = 22;
   @Input() left: number | string = 30;
 
+  rateUnitSub: Subscription;
+  weightMode: boolean = false;
   mempoolVsizeFeesOptions: any;
   mempoolVsizeFeesInitOptions = {
     renderer: 'svg'
   };
 
-  constructor() { }
+  constructor(
+    private stateService: StateService,
+  ) { }
 
   ngOnInit() {
-    this.mountChart();
+    this.rateUnitSub = this.stateService.rateUnits$.subscribe(rateUnits => {
+      this.weightMode = rateUnits === 'wu';
+      if (this.data) {
+        this.mountChart();
+      }
+    });
   }
 
   ngOnChanges() {
@@ -48,7 +59,12 @@ export class FeeDistributionGraphComponent implements OnInit, OnChanges {
             color: '#ffffff66',
             opacity: 0.25,
           }
-        }
+        },
+        axisLabel: {
+          formatter: (value) => {
+            return Math.floor(this.weightMode ? value / 4 : value);
+          }
+        },
       },
       series: [{
         data: this.data,
@@ -59,7 +75,11 @@ export class FeeDistributionGraphComponent implements OnInit, OnChanges {
           color: '#ffffff',
           textShadowBlur: 0,
           formatter: (label: any) => {
-            return Math.floor(label.data);
+            if (this.weightMode) {
+              return Math.floor(label.data / 4);
+            } else {
+              return Math.floor(label.data);
+            }
           },
         },
         smooth: true,
@@ -79,5 +99,9 @@ export class FeeDistributionGraphComponent implements OnInit, OnChanges {
         }
       }]
     };
+  }
+
+  ngOnDestroy(): void {
+    this.rateUnitSub.unsubscribe();
   }
 }
