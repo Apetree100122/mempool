@@ -7,7 +7,7 @@ import cpfpRepository from '../repositories/CpfpRepository';
 import { RowDataPacket } from 'mysql2';
 
 class DatabaseMigration {
-  private static currentVersion = 61;
+  private static currentVersion = 62;
   private queryTimeout = 3600_000;
   private statisticsAddedIndexed = false;
   private uniqueLogs: string[] = [];
@@ -533,6 +533,12 @@ class DatabaseMigration {
       await this.updateToSchemaVersion(61);
     }
 
+    if (databaseSchemaVersion < 62 && isBitcoin === true) {
+      await this.$executeQuery('ALTER TABLE `blocks_audits` ADD expected_fees BIGINT UNSIGNED DEFAULT NULL');
+      await this.$executeQuery('ALTER TABLE `blocks_audits` ADD expected_weight BIGINT UNSIGNED DEFAULT NULL');
+      await this.updateToSchemaVersion(62);
+    }
+
   }
 
   /**
@@ -1051,7 +1057,7 @@ class DatabaseMigration {
   }
 
   public async $blocksReindexingTruncate(): Promise<void> {
-    logger.warn(`Truncating pools, blocks and hashrates for re-indexing (using '--reindex-blocks'). You can cancel this command within 5 seconds`);
+    logger.warn(`Truncating pools, blocks, hashrates and difficulty_adjustments tables for re-indexing (using '--reindex-blocks'). You can cancel this command within 5 seconds`);
     await Common.sleep$(5000);
 
     await this.$executeQuery(`TRUNCATE blocks`);

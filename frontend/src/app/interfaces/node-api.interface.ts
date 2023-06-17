@@ -129,10 +129,15 @@ export interface PoolStat {
 export interface BlockExtension {
   totalFees?: number;
   medianFee?: number;
+  minFee?: number;
+  maxFee?: number;
   feeRange?: number[];
   reward?: number;
   coinbaseRaw?: string;
   matchRate?: number;
+  expectedFees?: number;
+  expectedWeight?: number;
+  feeDelta?: number;
   similarity?: number;
   pool?: {
     id: number;
@@ -149,6 +154,11 @@ export interface BlockAudit extends BlockExtended {
   missingTxs: string[],
   addedTxs: string[],
   matchRate: number,
+  expectedFees: number,
+  expectedWeight: number,
+  feeDelta?: number,
+  weightDelta?: number,
+  txDelta?: number,
   template: TransactionStripped[],
   transactions: TransactionStripped[],
 }

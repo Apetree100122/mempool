@@ -35,11 +35,15 @@ export interface BlockAudit {
   sigopTxs: string[],
   addedTxs: string[],
   matchRate: number,
+  expectedFees?: number,
+  expectedWeight?: number,
 }
 
 export interface AuditScore {
   hash: string,
   matchRate?: number,
+  expectedFees?: number
+  expectedWeight?: number
 }
 
 export interface MempoolBlock {
@@ -182,6 +186,8 @@ export interface BlockExtension {
   feeRange: number[]; // fee rate percentiles
   reward: number;
   matchRate: number | null;
+  expectedFees: number | null;
+  expectedWeight: number | null;
   similarity?: number;
   pool: {
     id: number; // Note - This is the `unique_id`, not to mix with the auto increment `id`
@@ -253,9 +259,16 @@ export interface WorkingEffectiveFeeStats extends EffectiveFeeStats {
   maxFee: number;
 }
 
+export interface CpfpCluster {
+  root: string,
+  height: number,
+  txs: Ancestor[],
+  effectiveFeePerVsize: number,
+}
+
 export interface CpfpSummary {
   transactions: TransactionExtended[];
-  clusters: { root: string, height: number, txs: Ancestor[], effectiveFeePerVsize: number }[];
+  clusters: CpfpCluster[];
 }
 
 export interface Statistic {

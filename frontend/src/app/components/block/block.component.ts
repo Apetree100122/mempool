@@ -138,6 +138,8 @@ export class BlockComponent implements OnInit, OnDestroy {
 
         if (block.id === this.blockHash) {
           this.block = block;
+          block.extras.minFee = this.getMinBlockFee(block);
+          block.extras.maxFee = this.getMaxBlockFee(block);
           if (block?.extras?.reward != undefined) {
             this.fees = block.extras.reward / 100000000 - this.blockSubsidy;
           }
@@ -234,6 +236,8 @@ export class BlockComponent implements OnInit, OnDestroy {
         }
         this.updateAuditAvailableFromBlockHeight(block.height);
         this.block = block;
+        block.extras.minFee = this.getMinBlockFee(block);
+        block.extras.maxFee = this.getMaxBlockFee(block);
         this.blockHeight = block.height;
         this.lastBlockHeight = this.blockHeight;
         this.nextBlockHeight = block.height + 1;
@@ -388,6 +392,11 @@ export class BlockComponent implements OnInit, OnDestroy {
             for (const tx of blockAudit.transactions) {
               inBlock[tx.txid] = true;
             }
+
+            blockAudit.feeDelta = blockAudit.expectedFees > 0 ? (blockAudit.expectedFees - this.block.extras.totalFees) / blockAudit.expectedFees : 0;
+            blockAudit.weightDelta = blockAudit.expectedWeight > 0 ? (blockAudit.expectedWeight - this.block.weight) / blockAudit.expectedWeight : 0;
+            blockAudit.txDelta = blockAudit.template.length > 0 ? (blockAudit.template.length - this.block.tx_count) / blockAudit.template.length : 0;
+
             this.setAuditAvailable(true);
           } else {
             this.setAuditAvailable(false);
@@ -662,5 +671,24 @@ export class BlockComponent implements OnInit, OnDestroy {
           this.setAuditAvailable(false);
         }
     }
+  }
+
+  getMinBlockFee(block: BlockExtended): number {
+    if (block?.extras?.feeRange) {
+      // heuristic to check if feeRange is adjusted for effective rates
+      if (block.extras.medianFee === block.extras.feeRange[3]) {
+        return block.extras.feeRange[1];
+      } else {
+        return block.extras.feeRange[0];
+      }
+    }
+    return 0;
+  }
+
+  getMaxBlockFee(block: BlockExtended): number {
+    if (block?.extras?.feeRange) {
+      return block.extras.feeRange[block.extras.feeRange.length - 1];
+    }
+    return 0;
   }
 }
