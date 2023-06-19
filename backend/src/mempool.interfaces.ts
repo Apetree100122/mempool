@@ -33,6 +33,7 @@ export interface BlockAudit {
   missingTxs: string[],
   freshTxs: string[],
   sigopTxs: string[],
+  fullrbfTxs: string[],
   addedTxs: string[],
   matchRate: number,
   expectedFees?: number,
