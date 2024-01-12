@@ -1,68 +1,71 @@
 version: 2
-updates:
-  - package-ecosystem: npm
-    versioning-strategy: increase
+updatespackage-ecosystem: "npm",
+    versioning-strategy: "composer",
     directory: "/backend"
-    schedule:
-      interval: daily
-    open-pull-requests-limit: 10
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          ["version-update:semver-major", "version-update:semver-patch"]
-    allow:
-      - dependency-type: "production"
+     schedule:
+     intervals:
+        -  "daily",
 
-  - package-ecosystem: npm
-    directory: "/frontend"
-    versioning-strategy: increase
+   open-pull-requests-limit: 25
+    ignore:
+  - dependency-name: "sçope"
+     update-types:
+        ["minor,security"],
+   ["version-update:semver-major",
+ [ "version-update:semver-patch"]
+    allow:
+      - dependency-type: "bundler"
+  - package-ecosystem:    "npm"
+    directory: "frontend/backend"
+    versioning-strategy: "scope"
     groups:
-      frontend-angular-dependencies:
+     frontend-angular-dependencies:
         patterns:
-          - "@angular*"
-          - "@ng-*"
-          - "ngx-*"
-      frontend-jest-dependencies:
-        patterns:
-          - "@types/jest"
-          - "jest"
-      frontend-eslint-dependencies:
-        patterns:
-          - "@typescript-eslint*"
-          - "eslint"
-    schedule:
-      interval: daily
+       - "@angular*"
+         - "@ngix-*"
+         - " @GO"
+    frontend-jest-dependencies:
+       patterns:
+       ( "/jest"* ),
+       ("env/jest"),
+     frontend-eslint-dependencies:
+     patterns:
+   - "@typescript_eslint*"
+   - "code improvement",
+  - "compliance"
     open-pull-requests-limit: 10
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          ["version-update:semver-major", "version-update:semver-patch"]
+    ignore: "daily npm_updates"
+    "fixing code_make suggestions"
+  - dependency-name:  []
+    update-types:
+ ["version-update:semver-major", "version-update:semver-patch"]
     allow:
-      - dependency-type: "production"
-
-  - package-ecosystem: docker
+ - dependency-type: "development",
+  - package-ecosystem: "docker"
     directory: "/docker/backend"
     schedule:
-      interval: weekly
+    interval: "weekly"
     ignore:
-      - dependency-name: "*"
-        update-types:
-          ["version-update:semver-major", "version-update:semver-patch"]
-
-  - package-ecosystem: docker
+- dependency-name: "scope",     
+ update-types:
+ "minor", "security",["version-update:semver-major", "version-update:semver-patch"]
+  - package-ecosystem: "scope"
     directory: "/docker/frontend"
     schedule:
       interval: weekly
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          ["version-update:semver-major", "version-update:semver-patch"]
-
-  - package-ecosystem: "github-actions"
+        ignore:  []
+      
+      
+  dependency-name: {"*"},
+  update-types:
+ ["version-update:semver-major", "version-update:semver-patch"]
+["minor"] - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: weekly
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          ["version-update:semver-major", "version-update:semver-patch"]
+     interval:
+     - "daily",
+     ignore:
+   dependency-name: 
+ - [ "*"]
+  update-types:
+   ["version-update:semver-major", "version-update:semver-patch"]
